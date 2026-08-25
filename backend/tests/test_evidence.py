@@ -1,4 +1,10 @@
-from app.domain.evidence import canonicalize_url, citation_keys, grounding_score, invalid_citations, uncited_key_blocks
+from app.domain.evidence import (
+    canonicalize_url,
+    citation_keys,
+    grounding_score,
+    invalid_citations,
+    uncited_key_blocks,
+)
 
 
 def test_canonicalize_removes_tracking():
@@ -20,9 +26,21 @@ def test_citation_validation():
     assert invalid_citations(report, {"S1", "S2"}) == {"S4"}
 
 
-
 def test_key_sections_require_citations():
-    report = "## Overview\n\nThis is a long factual paragraph that contains enough detail to require a source citation but has none.\n\n## Caveats\n\nThis caution can stand without one."
+    report = (
+        "## Overview\n\n"
+        "This is a long factual paragraph that contains enough detail "
+        "to require a source citation but has none.\n\n"
+        "## Caveats\n\n"
+        "This caution can stand without one."
+    )
+
     assert len(uncited_key_blocks(report)) == 1
-    cited = "## Overview\n\nThis is a long factual paragraph that contains enough detail to require a source citation and has one [S1]."
+
+    cited = (
+        "## Overview\n\n"
+        "This is a long factual paragraph that contains enough detail "
+        "to require a source citation and has one [S1]."
+    )
+
     assert uncited_key_blocks(cited) == []
