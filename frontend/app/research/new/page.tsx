@@ -1,0 +1,2 @@
+import NewResearchForm from "@/components/NewResearchForm";
+export default function NewResearchPage() { return <main className="shell dashboard" style={{maxWidth: 820}}><div className="page-head"><div><div className="kicker">New run</div><h1>What do you want to research?</h1><p className="muted">A focused question produces a stronger plan and cleaner evidence.</p></div></div><NewResearchForm /></main>; }
