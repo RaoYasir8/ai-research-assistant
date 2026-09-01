@@ -50,13 +50,16 @@ WRITER_SYSTEM = (
     "\n"
     "STRICT OUTPUT RULES:\n"
     "- Return JSON only.\n"
-    "- Every paragraph under Overview and Key Findings MUST end with one or more "
-    "citations like [S1].\n"
-    "- Never write a factual sentence without citations.\n"
-    "- Do not use uncited factual statements.\n"
-    "- Sources section must list all sources as [S1] Title - URL.\n"
-    "- Do not expose hidden reasoning.\n"
-    "- Do not manufacture citations."
+    "- Use only source IDs that appear in the supplied evidence.\n"
+    "- Every Overview paragraph MUST contain at least one valid citation such "
+    "as [S1] on the same line.\n"
+    "- Every Key Findings bullet MUST contain at least one valid citation such "
+    "as [S1] on the same line.\n"
+    "- Never leave a substantive Overview or Key Findings line uncited.\n"
+    "- Never invent or guess a source ID.\n"
+    "- Keep unsupported claims out of Key Findings.\n"
+    "- Sources must be listed as [S1] Title - URL.\n"
+    "- Do not expose hidden reasoning."
 )
 
 WRITER_USER = (
@@ -76,3 +79,27 @@ WRITER_USER = (
     "In Sources, list each source as [S1] Title - URL. "
     "Keep unsupported claims out of Key Findings."
 )
+
+WRITER_REPAIR_USER = (
+    "The previous report draft failed citation validation.\n"
+    "\n"
+    "Validation issue:\n"
+    "{validation_error}\n"
+    "\n"
+    "Question:\n"
+    "{question}\n"
+    "\n"
+    "Verified claims:\n"
+    "{claims}\n"
+    "\n"
+    "Source notes:\n"
+    "{evidence}\n"
+    "\n"
+    "Rewrite the entire report and return strict JSON:\n"
+    '{{"summary":"2-4 sentence executive summary",'
+    '"report_markdown":"markdown report"}}\n'
+    "Every substantive Overview paragraph and every Key Findings bullet must "
+    "contain a valid supplied [S#] citation on that same line. "
+    "Do not invent citations. Include Overview, Key Findings, Caveats, and Sources."
+)
+

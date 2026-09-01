@@ -44,3 +44,32 @@ def test_key_sections_require_citations():
     )
 
     assert uncited_key_blocks(cited) == []
+
+
+def test_multiline_key_finding_accepts_citation_on_final_line():
+    report = (
+        "## Key Findings\n\n"
+        "- AI-assisted development can improve productivity and reduce "
+        "repetitive engineering work,\n"
+        "  while still requiring human review and quality controls [S1].\n\n"
+        "## Caveats\n\n"
+        "Results depend on the available evidence."
+    )
+
+    assert uncited_key_blocks(report) == []
+
+
+def test_multiline_key_finding_without_citation_is_rejected():
+    report = (
+        "## Key Findings\n\n"
+        "- AI-assisted development can improve productivity and reduce "
+        "repetitive engineering work,\n"
+        "  while still requiring human review and quality controls.\n\n"
+        "## Caveats\n\n"
+        "Results depend on the available evidence."
+    )
+
+    missing = uncited_key_blocks(report)
+
+    assert len(missing) == 1
+    assert "AI-assisted development" in missing[0]

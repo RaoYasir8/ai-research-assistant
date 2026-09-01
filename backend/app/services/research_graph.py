@@ -19,6 +19,7 @@ from app.services.prompts import (
     CHECKER_USER,
     PLANNER_SYSTEM,
     PLANNER_USER,
+    WRITER_REPAIR_USER,
     WRITER_SYSTEM,
     WRITER_USER,
 )
@@ -88,21 +89,31 @@ def planner_node(state: ResearchState) -> ResearchState:
         queries = list(dict.fromkeys(queries))[: depth_cfg["max_queries"]]
 
         if len(queries) < depth_cfg["min_queries"]:
-            raise LocalModelError("planner returned too few usable queries")
+            raise LocalModelError(
+                "planner returned too few usable queries"
+            )
 
     except LocalModelError:
-        queries = _fallback_queries(state["question"], state["depth"])
+        queries = _fallback_queries(
+            state["question"],
+            state["depth"],
+        )
         warnings.append(
             "Planner used deterministic fallback because the local model was "
             "unavailable or malformed."
         )
 
     save_plan(state["run_id"], queries)
-    return {"plan": queries, "warnings": warnings}
+
+    return {
+        "plan": queries,
+        "warnings": warnings,
+    }
 
 
 def research_node(state: ResearchState) -> ResearchState:
     set_run_stage(state["run_id"], "researching", 35)
+
     max_sources = DEPTHS[state["depth"]]["max_sources"]
     warnings = list(state.get("warnings", []))
     raw_hits = []
@@ -136,8 +147,13 @@ def research_node(state: ResearchState) -> ResearchState:
 
     for hit in list(unique_by_url.values())[: max_sources * 2]:
         fetched = fetch_article(hit.url)
+
         evidence_text = fetched.text or hit.snippet
-        digest = content_hash(evidence_text) if evidence_text else None
+        digest = (
+            content_hash(evidence_text)
+            if evidence_text
+            else None
+        )
 
         if digest and digest in seen_hashes:
             continue
@@ -170,8 +186,15 @@ def research_node(state: ResearchState) -> ResearchState:
             "No usable sources were collected for this question."
         )
 
-    replace_sources(state["run_id"], sources)
-    return {"sources": sources, "warnings": warnings}
+    replace_sources(
+        state["run_id"],
+        sources,
+    )
+
+    return {
+        "sources": sources,
+        "warnings": warnings,
+    }
 
 
 def _evidence_text(
@@ -186,6 +209,7 @@ def _evidence_text(
             or source.get("snippet")
             or ""
         )
+
         blocks.append(
             f"BEGIN SOURCE {source['source_key']}\n"
             f"Title: {source['title']}\n"
@@ -198,13 +222,22 @@ def _evidence_text(
 
 
 def checker_node(state: ResearchState) -> ResearchState:
-    set_run_stage(state["run_id"], "fact_checking", 68)
+    set_run_stage(
+        state["run_id"],
+        "fact_checking",
+        68,
+    )
+
     warnings = list(state.get("warnings", []))
+
     allowed = {
         source["source_key"]
         for source in state["sources"]
     }
-    evidence = _evidence_text(state["sources"])
+
+    evidence = _evidence_text(
+        state["sources"]
+    )
 
     try:
         payload = ollama.chat_json(
@@ -215,10 +248,15 @@ def checker_node(state: ResearchState) -> ResearchState:
             ),
             temperature=0.0,
         )
-        raw_claims = payload.get("claims", [])
+
+        raw_claims = payload.get(
+            "claims",
+            [],
+        )
 
     except LocalModelError:
         raw_claims = []
+
         warnings.append(
             "Fact-check stage could not use the local model; "
             "the final report will be evidence-extractive."
@@ -236,32 +274,60 @@ def checker_node(state: ResearchState) -> ResearchState:
     claims = []
 
     for item in raw_claims[:20]:
-        claim = str(item.get("claim", "")).strip()
+        claim = str(
+            item.get(
+                "claim",
+                "",
+            )
+        ).strip()
+
         keys = [
             str(key)
-            for key in item.get("sources", [])
+            for key in item.get(
+                "sources",
+                [],
+            )
             if str(key) in allowed
         ]
 
         if not claim or not keys:
             continue
 
-        joined = " ".join(source_map[key] for key in keys)
-        score = grounding_score(claim, joined)
+        joined = " ".join(
+            source_map[key]
+            for key in keys
+        )
+
+        score = grounding_score(
+            claim,
+            joined,
+        )
+
         model_verdict = str(
-            item.get("verdict", "partial")
+            item.get(
+                "verdict",
+                "partial",
+            )
         ).lower()
 
         verdict = (
             model_verdict
             if model_verdict
-            in {"supported", "partial", "unsupported"}
+            in {
+                "supported",
+                "partial",
+                "unsupported",
+            }
             else "partial"
         )
 
         if score < 0.18:
             verdict = "unsupported"
-        elif score < 0.32 and verdict == "supported":
+
+        elif (
+            score < 0.32
+            and verdict == "supported"
+        ):
             verdict = "partial"
 
         try:
@@ -269,9 +335,15 @@ def checker_node(state: ResearchState) -> ResearchState:
                 0.0,
                 min(
                     1.0,
-                    float(item.get("confidence", 0.5)),
+                    float(
+                        item.get(
+                            "confidence",
+                            0.5,
+                        )
+                    ),
                 ),
             )
+
         except (TypeError, ValueError):
             confidence = 0.5
 
@@ -279,27 +351,99 @@ def checker_node(state: ResearchState) -> ResearchState:
             {
                 "claim_text": claim[:1800],
                 "verdict": verdict,
-                "confidence": round(confidence, 3),
+                "confidence": round(
+                    confidence,
+                    3,
+                ),
                 "grounding_score": score,
                 "source_keys": keys,
                 "note": (
-                    str(item.get("note", "")).strip()[:800]
+                    str(
+                        item.get(
+                            "note",
+                            "",
+                        )
+                    ).strip()[:800]
                     or None
                 ),
             }
         )
 
-    replace_claims(state["run_id"], claims)
-    return {"claims": claims, "warnings": warnings}
+    replace_claims(
+        state["run_id"],
+        claims,
+    )
+
+    return {
+        "claims": claims,
+        "warnings": warnings,
+    }
 
 
-def _fallback_report(
+def _validate_writer_output(
+    payload: dict,
+    allowed: set[str],
+) -> tuple[str, str]:
+    summary = str(
+        payload.get(
+            "summary",
+            "",
+        )
+    ).strip()
+
+    report = str(
+        payload.get(
+            "report_markdown",
+            "",
+        )
+    ).strip()
+
+    if not summary or not report:
+        raise LocalModelError(
+            "writer returned an empty report"
+        )
+
+    bad = invalid_citations(
+        report,
+        allowed,
+    )
+
+    if bad:
+        raise LocalModelError(
+            f"writer used invalid citations: {sorted(bad)}"
+        )
+
+    missing = uncited_key_blocks(
+        report
+    )
+
+    if missing:
+        raise LocalModelError(
+            f"writer left {len(missing)} substantive Overview or "
+            "Key Findings line(s) uncited"
+        )
+
+    return summary, report
+
+
+def _source_lines(
+    sources: list[dict],
+) -> list[str]:
+    return [
+        f"- [{source['source_key']}] "
+        f"{source['title']} - {source['url']}"
+        for source in sources
+    ]
+
+
+def _source_led_report(
     question: str,
     sources: list[dict],
 ) -> tuple[str, str]:
     summary = (
-        "The local generation model was unavailable, so this run returned "
-        "a source-led research digest instead of a synthesized narrative."
+        "The fact-checking stage did not produce enough verified claims "
+        "for a claim-led synthesis, so this run returned a source-led "
+        "research digest instead."
     )
 
     findings = []
@@ -310,109 +454,257 @@ def _fallback_report(
             or source.get("content_excerpt")
             or "No extract available."
         )
+
         findings.append(
             f"- {snippet[:420].strip()} "
             f"[{source['source_key']}]"
         )
 
-    source_lines = [
-        f"- [{source['source_key']}] "
-        f"{source['title']} - {source['url']}"
-        for source in sources
-    ]
+    overview_source = sources[0]["source_key"]
 
     report = (
         f"# Research: {question}\n\n"
         "## Overview\n\n"
-        f"{summary}\n\n"
+        "The available evidence is presented directly from the collected "
+        f"sources [{overview_source}].\n\n"
         "## Key Findings\n\n"
         + "\n".join(findings)
         + (
             "\n\n## Caveats\n\n"
-            "This fallback is extractive and should not be treated "
-            "as a full synthesis.\n\n"
-            "## Sources\n\n"
+            "The fact-checking stage did not yield enough verified claims "
+            "for a deterministic claim-led report. The findings above are "
+            "therefore source extracts rather than a synthesized narrative."
+            "\n\n## Sources\n\n"
         )
-        + "\n".join(source_lines)
+        + "\n".join(
+            _source_lines(sources)
+        )
     )
 
     return summary, report
 
 
-def writer_node(state: ResearchState) -> ResearchState:
-    set_run_stage(state["run_id"], "writing", 88)
-    warnings = list(state.get("warnings", []))
+def _claim_led_report(
+    question: str,
+    claims: list[dict],
+    sources: list[dict],
+) -> tuple[str, str]:
+    allowed = {
+        source["source_key"]
+        for source in sources
+    }
+
+    usable = []
+
+    for claim in claims:
+        if claim.get("verdict") == "unsupported":
+            continue
+
+        text = str(
+            claim.get(
+                "claim_text",
+                "",
+            )
+        ).strip()
+
+        keys = [
+            str(key)
+            for key in claim.get(
+                "source_keys",
+                [],
+            )
+            if str(key) in allowed
+        ]
+
+        if not text or not keys:
+            continue
+
+        usable.append(
+            {
+                "claim_text": text,
+                "verdict": claim.get(
+                    "verdict",
+                    "partial",
+                ),
+                "source_keys": keys,
+            }
+        )
+
+    if not usable:
+        return _source_led_report(
+            question,
+            sources,
+        )
+
+    overview_parts = []
+
+    for claim in usable[:2]:
+        citations = " ".join(
+            f"[{key}]"
+            for key in claim["source_keys"]
+        )
+
+        text = claim[
+            "claim_text"
+        ].rstrip(".")
+
+        overview_parts.append(
+            f"{text} {citations}."
+        )
+
+    findings = []
+
+    for claim in usable[:8]:
+        citations = " ".join(
+            f"[{key}]"
+            for key in claim["source_keys"]
+        )
+
+        text = claim[
+            "claim_text"
+        ].rstrip(".")
+
+        label = (
+            "Partial evidence: "
+            if claim["verdict"] == "partial"
+            else ""
+        )
+
+        findings.append(
+            f"- {label}{text} {citations}."
+        )
+
+    summary = (
+        "The model-generated narrative did not pass citation validation, "
+        "so this report was assembled from claims that passed the "
+        "fact-checking stage and their linked sources."
+    )
+
+    report = (
+        f"# Research: {question}\n\n"
+        "## Overview\n\n"
+        + " ".join(
+            overview_parts
+        )
+        + "\n\n## Key Findings\n\n"
+        + "\n".join(
+            findings
+        )
+        + (
+            "\n\n## Caveats\n\n"
+            "The narrative writer did not pass the citation quality gate "
+            "after one repair attempt. This report was therefore assembled "
+            "deterministically from verified or partially supported claims. "
+            "Partial-evidence findings should be interpreted cautiously."
+            "\n\n## Sources\n\n"
+        )
+        + "\n".join(
+            _source_lines(sources)
+        )
+    )
+
+    return summary, report
+
+
+def writer_node(
+    state: ResearchState,
+) -> ResearchState:
+    set_run_stage(
+        state["run_id"],
+        "writing",
+        88,
+    )
+
+    warnings = list(
+        state.get(
+            "warnings",
+            [],
+        )
+    )
+
     allowed = {
         source["source_key"]
         for source in state["sources"]
     }
+
     evidence = _evidence_text(
         state["sources"],
         per_source_chars=1500,
     )
+
     usable_claims = [
         claim
-        for claim in state.get("claims", [])
-        if claim["verdict"] != "unsupported"
+        for claim in state.get(
+            "claims",
+            [],
+        )
+        if claim["verdict"]
+        != "unsupported"
     ]
+
+    claims_json = json.dumps(
+        usable_claims,
+        ensure_ascii=False,
+    )
 
     try:
         payload = ollama.chat_json(
             WRITER_SYSTEM,
             WRITER_USER.format(
                 question=state["question"],
-                claims=json.dumps(
-                    usable_claims,
-                    ensure_ascii=False,
-                ),
+                claims=claims_json,
                 evidence=evidence,
             ),
             temperature=0.2,
         )
 
-        summary = str(
-            payload.get("summary", "")
-        ).strip()
-        report = str(
-            payload.get("report_markdown", "")
-        ).strip()
-
-        if not summary or not report:
-            raise LocalModelError(
-                "writer returned an empty report"
+        try:
+            summary, report = (
+                _validate_writer_output(
+                    payload,
+                    allowed,
+                )
             )
 
-        bad = invalid_citations(report, allowed)
-
-        if bad:
-            raise LocalModelError(
-                f"writer used invalid citations: {sorted(bad)}"
+        except LocalModelError as validation_error:
+            repair_payload = ollama.chat_json(
+                WRITER_SYSTEM,
+                WRITER_REPAIR_USER.format(
+                    validation_error=str(
+                        validation_error
+                    ),
+                    question=state["question"],
+                    claims=claims_json,
+                    evidence=evidence,
+                ),
+                temperature=0.0,
             )
 
-        if uncited_key_blocks(report):
-            raise LocalModelError(
-                "writer left substantive Overview or Key Findings "
-                "text uncited"
+            summary, report = (
+                _validate_writer_output(
+                    repair_payload,
+                    allowed,
+                )
             )
 
         if "## Sources" not in report:
-            source_lines = [
-                f"- [{source['source_key']}] "
-                f"{source['title']} - {source['url']}"
-                for source in state["sources"]
-            ]
             report += (
                 "\n\n## Sources\n\n"
-                + "\n".join(source_lines)
+                + "\n".join(
+                    _source_lines(
+                        state["sources"]
+                    )
+                )
             )
 
-    except LocalModelError as error:
-        summary, report = _fallback_report(
+    except LocalModelError:
+        summary, report = _claim_led_report(
             state["question"],
+            state.get(
+                "claims",
+                [],
+            ),
             state["sources"],
-        )
-        warnings.append(
-            f"Writer fallback reason: {error}"
         )
 
     complete_run(
@@ -431,17 +723,54 @@ def writer_node(state: ResearchState) -> ResearchState:
 
 
 def build_graph():
-    graph = StateGraph(ResearchState)
-    graph.add_node("planner", planner_node)
-    graph.add_node("researcher", research_node)
-    graph.add_node("fact_checker", checker_node)
-    graph.add_node("writer", writer_node)
+    graph = StateGraph(
+        ResearchState
+    )
 
-    graph.add_edge(START, "planner")
-    graph.add_edge("planner", "researcher")
-    graph.add_edge("researcher", "fact_checker")
-    graph.add_edge("fact_checker", "writer")
-    graph.add_edge("writer", END)
+    graph.add_node(
+        "planner",
+        planner_node,
+    )
+
+    graph.add_node(
+        "researcher",
+        research_node,
+    )
+
+    graph.add_node(
+        "fact_checker",
+        checker_node,
+    )
+
+    graph.add_node(
+        "writer",
+        writer_node,
+    )
+
+    graph.add_edge(
+        START,
+        "planner",
+    )
+
+    graph.add_edge(
+        "planner",
+        "researcher",
+    )
+
+    graph.add_edge(
+        "researcher",
+        "fact_checker",
+    )
+
+    graph.add_edge(
+        "fact_checker",
+        "writer",
+    )
+
+    graph.add_edge(
+        "writer",
+        END,
+    )
 
     return graph.compile()
 
