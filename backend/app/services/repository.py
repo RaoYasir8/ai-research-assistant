@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 
@@ -17,7 +17,7 @@ def set_run_stage(run_id: str, stage: str, progress: int, status: str = "running
         run.progress = progress
         run.status = status
         if run.started_at is None:
-            run.started_at = datetime.now(timezone.utc)
+            run.started_at = datetime.now(UTC)
         db.commit()
 
 
@@ -45,7 +45,9 @@ def replace_claims(run_id: str, items: list[dict]) -> None:
         db.commit()
 
 
-def complete_run(run_id: str, summary: str, report: str, warnings: list[str], model_name: str) -> None:
+def complete_run(
+    run_id: str, summary: str, report: str, warnings: list[str], model_name: str
+) -> None:
     with SessionLocal() as db:
         run = db.get(ResearchRun, run_id)
         if not run:
@@ -57,7 +59,7 @@ def complete_run(run_id: str, summary: str, report: str, warnings: list[str], mo
         run.status = "completed"
         run.stage = "completed"
         run.progress = 100
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         db.commit()
 
 
@@ -69,7 +71,7 @@ def fail_run(run_id: str, message: str) -> None:
         run.status = "failed"
         run.stage = "failed"
         run.error_message = message[:2000]
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         db.commit()
 
 

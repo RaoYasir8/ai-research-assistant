@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jwt import InvalidTokenError
@@ -63,7 +63,9 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+def register(
+    payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)
+):
     enforce_rate_limit(request, "register", limit=8, window_seconds=60)
     email = payload.email.lower()
     if db.scalar(select(User).where(User.email == email)):
@@ -77,11 +79,15 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
 
 
 @router.post("/login", response_model=UserOut)
-def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(
+    payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)
+):
     enforce_rate_limit(request, "login", limit=12, window_seconds=60)
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
     if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
     _set_auth_cookies(response, user.id, db)
     return user
 
@@ -103,7 +109,7 @@ def refresh(
         raise HTTPException(status_code=401, detail="Refresh session expired") from exc
 
     session = db.scalar(select(RefreshSession).where(RefreshSession.jti == payload["jti"]))
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if session is None or session.revoked_at is not None or session.expires_at <= now:
         _clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail="Refresh session is not valid")
@@ -122,7 +128,7 @@ def logout(response: Response, request: Request, db: Session = Depends(get_db)):
             payload = decode_token(token, "refresh")
             session = db.scalar(select(RefreshSession).where(RefreshSession.jti == payload["jti"]))
             if session and session.revoked_at is None:
-                session.revoked_at = datetime.now(timezone.utc)
+                session.revoked_at = datetime.now(UTC)
                 db.commit()
         except InvalidTokenError:
             pass

@@ -25,7 +25,9 @@ class OllamaClient:
                 if not response.is_success:
                     return False
                 names = {str(item.get("name", "")) for item in response.json().get("models", [])}
-                return self.model in names or any(name.startswith(f"{self.model}:") for name in names)
+                return self.model in names or any(
+                    name.startswith(f"{self.model}:") for name in names
+                )
         except httpx.HTTPError:
             return False
 

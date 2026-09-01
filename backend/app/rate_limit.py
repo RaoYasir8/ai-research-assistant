@@ -18,7 +18,9 @@ def enforce_rate_limit(request: Request, bucket: str, limit: int, window_seconds
         if current == 1:
             redis_client.expire(key, window_seconds + 1)
         if current > limit:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests"
+            )
     except HTTPException:
         raise
     except Exception:

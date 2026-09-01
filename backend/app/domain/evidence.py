@@ -19,7 +19,9 @@ def canonicalize_url(url: str) -> str:
             continue
         query_pairs.append((key, value))
     clean_path = parts.path.rstrip("/") or "/"
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), clean_path, urlencode(query_pairs), ""))
+    return urlunsplit(
+        (parts.scheme.lower(), parts.netloc.lower(), clean_path, urlencode(query_pairs), "")
+    )
 
 
 def content_hash(text: str) -> str:
@@ -46,7 +48,6 @@ def citation_keys(markdown: str) -> list[str]:
 
 def invalid_citations(markdown: str, allowed: set[str]) -> set[str]:
     return {key for key in citation_keys(markdown) if key not in allowed}
-
 
 
 def uncited_key_blocks(markdown: str) -> list[str]:

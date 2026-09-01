@@ -28,7 +28,9 @@ def stop_worker(*_args) -> None:
 
 def ensure_group() -> None:
     try:
-        redis_client.xgroup_create(settings.research_queue, settings.worker_group, id="0", mkstream=True)
+        redis_client.xgroup_create(
+            settings.research_queue, settings.worker_group, id="0", mkstream=True
+        )
     except ResponseError as exc:
         if "BUSYGROUP" not in str(exc):
             raise

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -24,8 +24,10 @@ def verify_password(password: str, password_hash: str) -> bool:
     return PASSWORD_HASH.verify(password, password_hash)
 
 
-def _encode_token(user_id: str, token_type: str, expires_delta: timedelta, jti: str | None = None) -> tuple[str, str]:
-    now = datetime.now(timezone.utc)
+def _encode_token(
+    user_id: str, token_type: str, expires_delta: timedelta, jti: str | None = None
+) -> tuple[str, str]:
+    now = datetime.now(UTC)
     token_jti = jti or uuid4().hex
     payload: dict[str, Any] = {
         "sub": user_id,
@@ -43,7 +45,7 @@ def create_access_token(user_id: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
-    expires = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_days)
+    expires = datetime.now(UTC) + timedelta(days=settings.refresh_token_days)
     token, jti = _encode_token(user_id, "refresh", timedelta(days=settings.refresh_token_days))
     return token, jti, expires
 

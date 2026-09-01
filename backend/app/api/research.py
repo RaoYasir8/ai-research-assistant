@@ -28,7 +28,12 @@ def _owned_run(db: Session, run_id: str, user_id: str) -> ResearchRun:
     return run
 
 
-@router.post("", response_model=ResearchRunOut, status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_csrf)])
+@router.post(
+    "",
+    response_model=ResearchRunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_csrf)],
+)
 def create_research(
     payload: ResearchCreate,
     request: Request,
@@ -41,7 +46,9 @@ def create_research(
     db.commit()
     db.refresh(run)
     try:
-        redis_client.xadd(settings.research_queue, {"run_id": run.id}, maxlen=10000, approximate=True)
+        redis_client.xadd(
+            settings.research_queue, {"run_id": run.id}, maxlen=10000, approximate=True
+        )
     except Exception as exc:
         run.status = "failed"
         run.stage = "failed"
@@ -74,21 +81,47 @@ def list_research(
 def stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     base = ResearchRun.user_id == user.id
     total = db.scalar(select(func.count()).select_from(ResearchRun).where(base)) or 0
-    completed = db.scalar(select(func.count()).select_from(ResearchRun).where(base, ResearchRun.status == "completed")) or 0
-    failed = db.scalar(select(func.count()).select_from(ResearchRun).where(base, ResearchRun.status == "failed")) or 0
-    total_sources = db.scalar(
-        select(func.count()).select_from(Source).join(ResearchRun).where(ResearchRun.user_id == user.id)
-    ) or 0
-    return StatsOut(total_runs=total, completed_runs=completed, failed_runs=failed, total_sources=total_sources)
+    completed = (
+        db.scalar(
+            select(func.count())
+            .select_from(ResearchRun)
+            .where(base, ResearchRun.status == "completed")
+        )
+        or 0
+    )
+    failed = (
+        db.scalar(
+            select(func.count())
+            .select_from(ResearchRun)
+            .where(base, ResearchRun.status == "failed")
+        )
+        or 0
+    )
+    total_sources = (
+        db.scalar(
+            select(func.count())
+            .select_from(Source)
+            .join(ResearchRun)
+            .where(ResearchRun.user_id == user.id)
+        )
+        or 0
+    )
+    return StatsOut(
+        total_runs=total, completed_runs=completed, failed_runs=failed, total_sources=total_sources
+    )
 
 
 @router.get("/{run_id}", response_model=ResearchRunOut)
-def get_research(run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def get_research(
+    run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
     return _owned_run(db, run_id, user.id)
 
 
 @router.get("/{run_id}/report.md")
-def download_report(run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def download_report(
+    run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
     run = _owned_run(db, run_id, user.id)
     if not run.report_markdown:
         raise HTTPException(status_code=409, detail="Report is not ready")
@@ -100,8 +133,12 @@ def download_report(run_id: str, db: Session = Depends(get_db), user: User = Dep
     )
 
 
-@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)])
-def delete_research(run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.delete(
+    "/{run_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)]
+)
+def delete_research(
+    run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
     run = _owned_run(db, run_id, user.id)
     if run.status in {"queued", "running"}:
         raise HTTPException(status_code=409, detail="A running research job cannot be deleted")

@@ -21,14 +21,26 @@ class FetchResult:
 
 
 def _assert_public_host(hostname: str) -> None:
-    if hostname.lower().endswith((".local", ".internal", ".localhost")) or hostname.lower() == "localhost":
+    if (
+        hostname.lower().endswith((".local", ".internal", ".localhost"))
+        or hostname.lower() == "localhost"
+    ):
         raise ValueError("local hostnames are blocked")
     infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     if not infos:
         raise ValueError("hostname did not resolve")
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if any((ip.is_private, ip.is_loopback, ip.is_link_local, ip.is_multicast, ip.is_reserved, ip.is_unspecified)):
+        if any(
+            (
+                ip.is_private,
+                ip.is_loopback,
+                ip.is_link_local,
+                ip.is_multicast,
+                ip.is_reserved,
+                ip.is_unspecified,
+            )
+        ):
             raise ValueError("non-public address is blocked")
 
 
@@ -79,7 +91,10 @@ def fetch_article(url: str) -> FetchResult:
                         continue
                     response.raise_for_status()
                     content_type = response.headers.get("content-type", "").lower()
-                    if not any(kind in content_type for kind in ("text/html", "text/plain", "application/xhtml+xml")):
+                    if not any(
+                        kind in content_type
+                        for kind in ("text/html", "text/plain", "application/xhtml+xml")
+                    ):
                         return FetchResult("", "unsupported_content")
                     data = bytearray()
                     for chunk in response.iter_bytes():
@@ -88,12 +103,15 @@ def fetch_article(url: str) -> FetchResult:
                             break
                     encoding = response.encoding or "utf-8"
                     html = bytes(data).decode(encoding, errors="replace")
-                    extracted = trafilatura.extract(
-                        html,
-                        include_comments=False,
-                        include_tables=False,
-                        no_fallback=False,
-                    ) or ""
+                    extracted = (
+                        trafilatura.extract(
+                            html,
+                            include_comments=False,
+                            include_tables=False,
+                            no_fallback=False,
+                        )
+                        or ""
+                    )
                     clean = " ".join(extracted.split())[: settings.max_source_chars]
                     return FetchResult(clean, "fetched" if clean else "empty")
             return FetchResult("", "too_many_redirects")

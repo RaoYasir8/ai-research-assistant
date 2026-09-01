@@ -18,7 +18,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         try:
             response: Response = await call_next(request)
         except Exception:
-            logger.exception("request_failed", extra={"request_id": request_id, "path": request.url.path})
+            logger.exception(
+                "request_failed", extra={"request_id": request_id, "path": request.url.path}
+            )
             raise
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
         response.headers["X-Request-ID"] = request_id
@@ -26,12 +28,16 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        logger.info(json.dumps({
-            "event": "request",
-            "request_id": request_id,
-            "method": request.method,
-            "path": request.url.path,
-            "status": response.status_code,
-            "duration_ms": elapsed_ms,
-        }))
+        logger.info(
+            json.dumps(
+                {
+                    "event": "request",
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": response.status_code,
+                    "duration_ms": elapsed_ms,
+                }
+            )
+        )
         return response

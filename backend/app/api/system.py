@@ -1,3 +1,5 @@
+from contextlib import suppress
+
 from fastapi import APIRouter, Depends, HTTPException
 from redis import Redis
 from sqlalchemy import text
@@ -18,16 +20,24 @@ def health():
 @router.get("/ready")
 def ready(db: Session = Depends(get_db)):
     checks = {"database": False, "redis": False, "ollama": False}
-    try:
+
+    with suppress(Exception):
         db.execute(text("SELECT 1"))
         checks["database"] = True
-    except Exception:
-        pass
-    try:
+
+    with suppress(Exception):
         checks["redis"] = bool(Redis.from_url(settings.redis_url).ping())
-    except Exception:
-        pass
+
     checks["ollama"] = ollama.is_ready()
+
     if not all(checks.values()):
-        raise HTTPException(status_code=503, detail={"status": "not_ready", "checks": checks})
-    return {"status": "ready", "checks": checks, "model": settings.ollama_model}
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "checks": checks},
+        )
+
+    return {
+        "status": "ready",
+        "checks": checks,
+        "model": settings.ollama_model,
+    }
